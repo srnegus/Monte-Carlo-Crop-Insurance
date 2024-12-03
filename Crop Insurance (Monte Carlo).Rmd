@@ -8,6 +8,7 @@ output: pdf_document
 library(ggplot2)
 
 #Generating 2 N(0,1) Draws
+set.seed(50)
 draw1 = rnorm(5000, 0, 1)
 draw2 = rnorm(5000, 0, 1)
 
@@ -23,11 +24,11 @@ corr_prob = pnorm(corr)
 ###########################################
 
 #ZCZ25
-cur_price  = 4.3725
+cur_price  = 4.31
 #Time to Maturity
 time = 1  + (1/12)
 #Implied Volatility
-imp_vol =  .2132
+imp_vol =  .2125
 sd  = imp_vol*sqrt(time)
 prices = qlnorm(d1_prob, log(cur_price), sd)
 
@@ -48,8 +49,27 @@ yields = betainv(corr_prob, 1.7, 0.65, low, high)
 ```
 
 \begin{center}
+\textbf{Introduction}
+\end{center}
+
+In general, crop yields and prices tend to have an inverse relationship, meaning that higher yields often lead to lower prices, and lower yields can cause higher prices. This correlation due to a couple reasons, firstly when yields are high, the supply of the crop increases. This increase in supply then leads to a decrease in prices. On the other hand, when yields are low due to adverse conditions, supply decreases and this drives up prices.
+
+Producers can engage in risk management strategies to help mitigate some of the risks posed by this inverse relationship. The below sections will take a look at how some of these strategies can effect expected revenue through Monte Carlo simulation.
+
+\newpage
+
+\begin{center}
 \textbf{No Hedge}
 \end{center}
+
+Using Monte Carlo analysis, a statistical method which generates a large number of random inputs to model the probability of different outcomes, we can estimate possible revenue of corn production for next fall.
+
+By generating two normal distributions and imposing a negative correlation between the two draws, we can create probabilities from the first draw and the correlated draw. Then using the time to current Dec '25 futures price, time to maturity, and implied volatility from the market (\$4.31/bu. and 21.25% at the time of writing this) we can create a log distribution of prices (using a log distribution as prices cannot go below 0 and will be centered around the expected price of \$4.31/bu. with a right tail).
+
+To generate the distribution of yields, we use the correlated probabilities to create a beta distribution (using a beta distribution as this allows us to set a upper and lower bound and adjust the skewness) with a upper bound of 252 bushels and a lower of 78 bushels.
+
+By multiplying the two distributions we get a distribution of revenue per acre which can be seen in Figure 1. The average revenue of the distribution is \$867/acre. In the figure the red line depicts Iowa State Extension's estimated break-even point for 2024 of \$856.43/acre. The dashed line shows the 50th percentile which occurs at roughly \$865/ac. The dotted lines show the worst and best 5% of outcomes which occur at roughly \$647/ac. and \$1090/ac.
+
 \begin{figure}[h]
 \centering
   \caption{Distribution of Revenue}
@@ -62,12 +82,12 @@ revenue = prices*yields
 
 data = data.frame(yields,prices,revenue)
 
-ggplot(data, aes(revenue, ..count..)) +
+ggplot(data, aes(revenue)) +
   geom_histogram(fill = "darkgrey", color = "black", alpha = 0.7) +
   xlab("Revenue ($/acre)") + ylab("Count") +
-  geom_vline(xintercept = 856.43, color = "red", size=1) +
-  geom_vline(xintercept = quantile(data$revenue, probs = 0.5), linetype = "dashed", color = "black", size=1) +
-  geom_vline(xintercept = c(quantile(data$revenue, probs = 0.05) ,quantile(data$revenue, probs = 0.95)), linetype = "dotted", color = "black", size=1) +
+  geom_vline(xintercept = 856.43, color = "red", linewidth=1) +
+  geom_vline(xintercept = quantile(data$revenue, probs = 0.5), linetype = "dashed", color = "black", linewidth=1) +
+  geom_vline(xintercept = c(quantile(data$revenue, probs = 0.05) ,quantile(data$revenue, probs = 0.95)), linetype = "dotted", color = "black", linewidth=1) +
   annotate(x=856.43,y=700,label="Breakeven",vjust=2,geom="label") +
   annotate(x=quantile(data$revenue, probs = 0.5),y=600,label="50%",vjust=2,geom="label") +
   annotate(x=quantile(data$revenue, probs = 0.05),y=500,label="Worst 5%",vjust=2,geom="label") +
@@ -75,9 +95,16 @@ ggplot(data, aes(revenue, ..count..)) +
   theme_minimal()
 ```
 
+\newpage
+
 \begin{center}
 \textbf{Forward Contracting 85$\%$ of Expected Yields}
 \end{center}
+
+One strategy of risk management is forward contracting. In this scenario 85% of the average yield (173 bu.) is contracted at the average price (\$4.41/bu). The distribution of hedged revenue can be seen below in Figure 2. The average of the hedged revenue remained the same as before at \$867/acre. The 50th percentile increased from \$865/ac to \$944/ac but the 95th percentile decreased from \$1090/ac to \$1053/bu. In addition, the 5th percentile decreased from \$647/ac. to \$463/ac.
+
+So because of the inverse correlation of yields and prices, when yields are low, prices are then higher due to lower supply. The lower yields cause revenue to then be lower and the hedge will then generate a loss because of higher prices. Even though the median revenue is higher, this leads to a slight decrease in potential upside and a significant increase in potential downside.
+
 \begin{figure}[h]
 \centering
   \caption{Distribution of Revenue under Forward Contracting}
@@ -86,15 +113,15 @@ ggplot(data, aes(revenue, ..count..)) +
 ```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align = "center", out.width="70%", out.height='70%'}
 #Forward Contracting#
 #####################
-forward_price = 4.5
+forward_price = mean(data$prices)
 data$hedged_rev = data$revenue + (forward_price - data$prices)*(.85*mean(data$yields))
 
 ggplot(data, aes(hedged_rev)) +
   geom_histogram(fill = "darkgrey", color = "black", alpha = 0.7) +
   xlab("Revenue ($/acre)") + ylab("Count") +
-  geom_vline(xintercept = 856.43, color = "red", size=1) +
-  geom_vline(xintercept = quantile(data$hedged_rev, probs = 0.5), linetype = "dashed", color = "black", size=1) +
-  geom_vline(xintercept = c(quantile(data$hedged_rev, probs = 0.05) ,quantile(data$hedged_rev, probs = 0.95)), linetype = "dotted", color = "black", size=1) +
+  geom_vline(xintercept = 856.43, color = "red", linewidth=1) +
+  geom_vline(xintercept = quantile(data$hedged_rev, probs = 0.5), linetype = "dashed", color = "black", linewidth=1) +
+  geom_vline(xintercept = c(quantile(data$hedged_rev, probs = 0.05) ,quantile(data$hedged_rev, probs = 0.95)), linetype = "dotted", color = "black", linewidth=1) +
   annotate(x=856.43,y=750,label="Breakeven",vjust=2,geom="label") +
   annotate(x=quantile(data$hedged_rev, probs = 0.05),y=500,label="Worst 5%",vjust=2,geom="label") +
   annotate(x=quantile(data$hedged_rev, probs = 0.5),y=600,label="50%",vjust=2,geom="label") +
@@ -102,9 +129,16 @@ ggplot(data, aes(hedged_rev)) +
   theme_minimal()
 ```
 
+\newpage
+
 \begin{center}
 \textbf{Revenue Protection}
 \end{center}
+
+Another possibility is revenue insurance, in this scenario the insurance product is 85% revenue protection with a harvest price option with the "February price" as the average of all the prices and the generated price as the harvest price. The revenue guarantee then becomes the 85% coverage multiplied by the average of the yields and the max of February and harvest price. The indemnity payment is then the max of 0 or the guarantee minus revenue and the premium is the average of all indemnities. The total revenue under this product then becomes the initial revenue plus the indemnity minus 42% of the premium (government subsidizing the other 58%).
+
+The distribution of this revenue can then be seen by Figure 3. The average revenue now increases to \$941/acre. The 50th percentile increased to \$926/ac. from the original \$865/ac but below the \$944/ac from forward contracting . The 95th percentile increased to \$1161/ac. compared to \$1090/ac (original) and \$1053/bu. (forward contracting). In addition, the 5th percentile increased to \$787/ac. compared \$647/ac. and \$463/ac.
+
 \begin{figure}[h]
 \centering
   \caption{Distribution of Revenue with 85$\%$ Revenue Protection}
@@ -129,9 +163,9 @@ data$rp_net = data$revenue+data$indemnity+(.42*rp_value)
 ggplot(data, aes(rp_net)) +
   geom_histogram(fill = "darkgrey", color = "black", alpha = 0.7) +
   xlab("Revenue ($/acre)") + ylab("Count") +
-  geom_vline(xintercept = 856.43, color = "red", size=1) +
-  geom_vline(xintercept = quantile(data$rp_net, probs = 0.5), linetype = "dashed", color = "black", size=1) +
-  geom_vline(xintercept = c(quantile(data$rp_net, probs = 0.05) ,quantile(data$rp_net, probs = 0.95)), linetype = "dotted", color = "black", size=1) +
+  geom_vline(xintercept = 856.43, color = "red", linewidth=1) +
+  geom_vline(xintercept = quantile(data$rp_net, probs = 0.5), linetype = "dashed", color = "black", linewidth=1) +
+  geom_vline(xintercept = c(quantile(data$rp_net, probs = 0.05) ,quantile(data$rp_net, probs = 0.95)), linetype = "dotted", color = "black", linewidth=1) +
   annotate(x=856.43,y=550,label="Breakeven",vjust=2,geom="label") +
   annotate(x=quantile(data$rp_net, probs = 0.5),y=600,label="50%",vjust=2,geom="label") +
   annotate(x=quantile(data$rp_net, probs = 0.05),y=700,label="Worst 5%",vjust=2,geom="label") +
@@ -139,9 +173,14 @@ ggplot(data, aes(rp_net)) +
   theme_minimal()
 ```
 
+\newpage
+
 \begin{center}
 \textbf{Forward Contracting with Revenue Protection}
 \end{center}
+
+The last scenario involves 85% revenue protection with forward contracting the total amount insured, which can be seen in Figure 4. In this distribution the average revenue is \$941/ac. which is the same as using only revenue protection. The 50th percentile is \$970/ac. which is the highest out of all the strategies. The 5th and 95th percentile are again the same as using only revenue protection at \$787/ac.
+
 \begin{figure}[h]
 \centering
   \caption{Distribution of Revenue with 85$\%$ RP and Forward Contracting}
@@ -155,9 +194,9 @@ data$rp_hedge_net = data$hedged_rev + data$indemnity + (.42*rp_value)
 ggplot(data, aes(rp_hedge_net)) +
   geom_histogram(fill = "darkgrey", color = "black", alpha = 0.7) +
   xlab("Revenue ($/acre)") + ylab("Count") +
-  geom_vline(xintercept = 856.43, color = "red", size=1) +
-  geom_vline(xintercept = quantile(data$rp_hedge_net, probs = 0.5), linetype = "dashed", color = "black", size=1) +
-  geom_vline(xintercept = c(quantile(data$rp_hedge_net, probs = 0.05) ,quantile(data$rp_hedge_net, probs = 0.95)), linetype = "dotted", color = "black", size=1) +
+  geom_vline(xintercept = 856.43, color = "red", linewidth=1) +
+  geom_vline(xintercept = quantile(data$rp_hedge_net, probs = 0.5), linetype = "dashed", color = "black", linewidth=1) +
+  geom_vline(xintercept = c(quantile(data$rp_hedge_net, probs = 0.05) ,quantile(data$rp_hedge_net, probs = 0.95)), linetype = "dotted", color = "black", linewidth=1) +
   annotate(x=856.43,y=700,label="Breakeven",vjust=2,geom="label") +
   annotate(x=quantile(data$rp_hedge_net, probs = 0.5),y=600,label="50%",vjust=2,geom="label") +
   annotate(x=quantile(data$rp_hedge_net, probs = 0.05),y=600,label="Worst 5%",vjust=2,geom="label") +
